@@ -1,0 +1,5 @@
+watchdog==3.0.0
+python-daemon==3.0.1
+cryptography==42.0.2
+pyinotify==0.9.6
+click==8.1.7 
