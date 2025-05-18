@@ -78,14 +78,22 @@ def stop_workspace(preserve_files=None):
     new_files_list = []
     modified_files_list = []
     deleted_files_list = []
-    preserved_files = set(preserve_files) if preserve_files else set()
+    
+    # Convert preserve_files to absolute paths if they aren't already
+    preserved_files = set()
+    if preserve_files:
+        for file_path in preserve_files:
+            if not os.path.isabs(file_path):
+                abs_path = os.path.join(os.path.expanduser('~'), file_path)
+            else:
+                abs_path = file_path
+            preserved_files.add(abs_path)
 
     # First collect all changes
     # Check for deleted files
     for original_path in workspace.original_state:
         if not os.path.exists(original_path):
-            rel_path = os.path.relpath(original_path, os.path.expanduser('~'))
-            deleted_files_list.append(rel_path)
+            deleted_files_list.append(original_path)
 
     # Check for new and modified files
     for filepath in current_files:
@@ -96,29 +104,26 @@ def stop_workspace(preserve_files=None):
         
         # New file
         if norm_path not in workspace.original_state:
-            rel_path = os.path.relpath(norm_path, os.path.expanduser('~'))
-            new_files_list.append(rel_path)
+            new_files_list.append(norm_path)
             continue
 
         # Modified file
         current_hash = workspace._calculate_file_hash(norm_path)
         if current_hash != workspace.original_state[norm_path]:
-            rel_path = os.path.relpath(norm_path, os.path.expanduser('~'))
-            modified_files_list.append(rel_path)
+            modified_files_list.append(norm_path)
 
     # Now handle the changes based on preserved files
     # Handle deleted files
     for original_path in workspace.original_state:
         if not os.path.exists(original_path):
-            rel_path = os.path.relpath(original_path, os.path.expanduser('~'))
-            if rel_path not in preserved_files:
-                backup_file = os.path.join(workspace.backup_path, rel_path)
+            if original_path not in preserved_files:
+                backup_file = os.path.join(workspace.backup_path, os.path.relpath(original_path, os.path.expanduser('~')))
                 try:
                     os.makedirs(os.path.dirname(original_path), exist_ok=True)
                     shutil.copy2(backup_file, original_path)
                     deleted_files_restored += 1
-                except (OSError, IOError):
-                    pass
+                except (OSError, IOError) as e:
+                    workspace.logger.error(f"Failed to restore deleted file {original_path}: {str(e)}")
 
     # Handle new and modified files
     for filepath in current_files:
@@ -126,35 +131,34 @@ def stop_workspace(preserve_files=None):
             continue
 
         norm_path = workspace._normalize_path(filepath)
-        rel_path = os.path.relpath(norm_path, os.path.expanduser('~'))
         
         # New file
         if norm_path not in workspace.original_state:
-            if rel_path not in preserved_files:
+            if norm_path not in preserved_files:
                 try:
                     os.remove(norm_path)
                     new_files_removed += 1
-                except OSError:
-                    pass
+                except OSError as e:
+                    workspace.logger.error(f"Failed to remove new file {norm_path}: {str(e)}")
             continue
 
         # Modified file
         current_hash = workspace._calculate_file_hash(norm_path)
         if current_hash != workspace.original_state[norm_path]:
-            if rel_path not in preserved_files:
-                backup_file = os.path.join(workspace.backup_path, rel_path)
+            if norm_path not in preserved_files:
+                backup_file = os.path.join(workspace.backup_path, os.path.relpath(norm_path, os.path.expanduser('~')))
                 try:
                     shutil.copy2(backup_file, norm_path)
                     modified_files_reverted += 1
-                except (OSError, IOError):
-                    pass
+                except (OSError, IOError) as e:
+                    workspace.logger.error(f"Failed to revert modified file {norm_path}: {str(e)}")
 
     # Clean up
     try:
         os.remove(workspace.STATE_FILE)
         shutil.rmtree(workspace.backup_path)
-    except OSError:
-        pass
+    except OSError as e:
+        workspace.logger.error(f"Failed to clean up: {str(e)}")
 
     # Print detailed summary
     workspace.logger.info("\nSummary of changes:")
