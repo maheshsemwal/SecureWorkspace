@@ -10,6 +10,7 @@ app.disableHardwareAcceleration();
 let mainWindow;
 let fileWatcher = null;
 let fileChanges = [];
+let sessionHistory = [];
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -97,6 +98,16 @@ function stopFileWatching() {
   fileChanges = [];
 }
 
+function addToSessionHistory(session) {
+  sessionHistory.push({
+    ...session,
+    timestamp: Date.now()
+  });
+  if (mainWindow) {
+    mainWindow.webContents.send('session-history-updated', sessionHistory);
+  }
+}
+
 app.whenReady().then(() => {
   createWindow();
   startFileWatching();
@@ -127,9 +138,24 @@ ipcMain.handle('toggle-secure-mode', async (event, enabled, selectedFiles = []) 
       return { success: false, error: 'Script not found' };
     }
 
+    // If disabling secure mode, pause file watching during cleanup
+    if (!enabled) {
+      stopFileWatching();
+    }
+
+    // Convert relative paths to absolute paths for selected files
+    const absoluteSelectedFiles = selectedFiles.map(filePath => {
+      // If the path is already absolute, return as is
+      if (path.isAbsolute(filePath)) {
+        return filePath;
+      }
+      // Otherwise, make it absolute relative to home directory
+      return path.join(process.env.HOME || process.env.USERPROFILE, filePath);
+    });
+
     const pythonProcess = spawn('python3', [
       scriptPath,
-      ...(enabled ? [] : ['--preserve-files', JSON.stringify(selectedFiles)])
+      ...(enabled ? [] : ['--preserve-files', JSON.stringify(absoluteSelectedFiles)])
     ]);
     
     return new Promise((resolve, reject) => {
@@ -151,8 +177,19 @@ ipcMain.handle('toggle-secure-mode', async (event, enabled, selectedFiles = []) 
         if (code === 0) {
           if (enabled) {
             startFileWatching();
+            addToSessionHistory({
+              type: 'start',
+              timestamp: Date.now()
+            });
           } else {
-            stopFileWatching();
+            // Add session end to history
+            addToSessionHistory({
+              type: 'end',
+              preservedFiles: selectedFiles,
+              changes: fileChanges,
+              timestamp: Date.now()
+            });
+            fileChanges = [];
           }
           resolve({ success: true });
         } else {
@@ -183,4 +220,8 @@ ipcMain.handle('toggle-secure-mode', async (event, enabled, selectedFiles = []) 
 
 ipcMain.handle('get-file-changes', async () => {
   return fileChanges;
+});
+
+ipcMain.handle('get-session-history', async () => {
+  return sessionHistory;
 }); 
