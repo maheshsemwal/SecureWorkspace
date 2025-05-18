@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 import click
+import argparse
 from secure_workspace import SecureWorkspace
 
 def _ask_for_preservation(workspace, files: list, change_type: str) -> set:
@@ -47,7 +48,7 @@ def _ask_for_preservation(workspace, files: list, change_type: str) -> set:
                 
     return preserved
 
-def stop_workspace():
+def stop_workspace(preserve_files=None):
     """Stop the secure workspace and handle file preservation."""
     workspace = SecureWorkspace()
     workspace.logger.info("\nStopping secure workspace...")
@@ -77,7 +78,7 @@ def stop_workspace():
     new_files_list = []
     modified_files_list = []
     deleted_files_list = []
-    preserved_files = set()
+    preserved_files = set(preserve_files) if preserve_files else set()
 
     # First collect all changes
     # Check for deleted files
@@ -105,23 +106,7 @@ def stop_workspace():
             rel_path = os.path.relpath(norm_path, os.path.expanduser('~'))
             modified_files_list.append(rel_path)
 
-    # Ask user which files to preserve for each category
-    if new_files_list or modified_files_list or deleted_files_list:
-        workspace.logger.info("\nSelect files to preserve:")
-        
-        if new_files_list:
-            preserved_new = _ask_for_preservation(workspace, new_files_list, "new")
-            preserved_files.update(preserved_new)
-            
-        if modified_files_list:
-            preserved_modified = _ask_for_preservation(workspace, modified_files_list, "modified")
-            preserved_files.update(preserved_modified)
-            
-        if deleted_files_list:
-            preserved_deleted = _ask_for_preservation(workspace, deleted_files_list, "deleted")
-            preserved_files.update(preserved_deleted)
-
-    # Now handle the changes based on user choices
+    # Now handle the changes based on preserved files
     # Handle deleted files
     for original_path in workspace.original_state:
         if not os.path.exists(original_path):
@@ -194,10 +179,10 @@ def stop_workspace():
     workspace.logger.info("\nSecure workspace stopped successfully")
     return True
 
-@click.command()
-def main():
-    if not stop_workspace():
-        sys.exit(1)
-
 if __name__ == '__main__':
-    main() 
+    parser = argparse.ArgumentParser(description='Stop secure workspace session')
+    parser.add_argument('--preserve-files', type=str, help='JSON array of files to preserve')
+    args = parser.parse_args()
+
+    preserve_files = json.loads(args.preserve_files) if args.preserve_files else None
+    stop_workspace(preserve_files) 
