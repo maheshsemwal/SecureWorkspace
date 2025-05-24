@@ -11,6 +11,7 @@ let mainWindow;
 let fileWatcher = null;
 let fileChanges = [];
 let sessionHistory = [];
+let pythonProcess = null;  // Track the Python process
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -115,6 +116,14 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopFileWatching();
+  
+  // If there's a running Python process, terminate it
+  if (pythonProcess) {
+    console.log('Terminating Python process...');
+    pythonProcess.kill('SIGTERM');
+    pythonProcess = null;
+  }
+  
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -153,7 +162,8 @@ ipcMain.handle('toggle-secure-mode', async (event, enabled, selectedFiles = []) 
       return path.join(process.env.HOME || process.env.USERPROFILE, filePath);
     });
 
-    const pythonProcess = spawn('python3', [
+    // Store the process reference
+    pythonProcess = spawn('python3', [
       scriptPath,
       ...(enabled ? [] : ['--preserve-files', JSON.stringify(absoluteSelectedFiles)])
     ]);
@@ -174,6 +184,7 @@ ipcMain.handle('toggle-secure-mode', async (event, enabled, selectedFiles = []) 
 
       pythonProcess.on('close', (code) => {
         console.log('Python process exited with code:', code);
+        pythonProcess = null;  // Clear the process reference
         if (code === 0) {
           if (enabled) {
             startFileWatching();
@@ -204,6 +215,7 @@ ipcMain.handle('toggle-secure-mode', async (event, enabled, selectedFiles = []) 
       
       pythonProcess.on('error', (err) => {
         console.error('Failed to execute Python script:', err);
+        pythonProcess = null;  // Clear the process reference
         reject({ 
           success: false, 
           error: err.message,

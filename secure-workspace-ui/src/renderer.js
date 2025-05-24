@@ -37,7 +37,8 @@ import {
   Add as AddIcon,
   Save as SaveIcon,
   History as HistoryIcon,
-  Timeline as TimelineIcon
+  Timeline as TimelineIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { createRoot } from 'react-dom/client';
 
@@ -270,16 +271,20 @@ function App() {
     ));
   };
 
+  const handleClose = () => {
+    window.close();
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ flexGrow: 1, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <AppBar position="static" elevation={0}>
+        <AppBar position="static" sx={{ WebkitAppRegion: 'drag' }}>
           <Toolbar>
             <SecurityIcon sx={{ mr: 2 }} />
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
               Secure Workspace
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', WebkitAppRegion: 'no-drag' }}>
               <Typography variant="body1" sx={{ mr: 2 }}>
                 Secure Mode
               </Typography>
@@ -292,6 +297,13 @@ function App() {
                   color="secondary"
                 />
               )}
+              <IconButton 
+                color="inherit" 
+                onClick={handleClose}
+                sx={{ ml: 2 }}
+              >
+                <CloseIcon />
+              </IconButton>
             </Box>
           </Toolbar>
         </AppBar>
